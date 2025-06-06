@@ -1,0 +1,100 @@
+message Abi {
+  headers: Headers,
+  symbols: Symbols,
+  types: Types,
+  functions: Functions,
+}
+
+message Headers {
+  major: u16,
+  magic: u16,
+  version: u16,
+  crc: u64,
+}
+
+message Symbols {
+  byte_size: u64,
+  // omitting array length means we first read a u32 that will be the length
+  symbols: Symbol[],
+}
+
+message Symbol {
+  size: vu32,
+  text: u8[size],
+}
+
+message Types {
+  byte_size: u64,
+  nb_types: u32,
+  nb_attrs: u32,
+  types: Type[nb_types],
+}
+
+message Type {
+  module: vu32,
+  name: vu32,
+  lib: vu32,
+  generic_abi_type: vu32,
+  g1: vu32,
+  g2: vu32,
+  super_type: vu32,
+  nb_attrs: vu32,
+  attrs_off: vu32,
+  mapped_prog_type_off: vu32,
+  masked_abi_type_off: vu32,
+  nullable_nb_bytes: vu32,
+  flags: TypeFlags,
+  attrs: TypeAttr[nb_attrs],
+}
+
+bitfield TypeFlags {
+  native: 0,
+  abstract: 1,
+  enum: 2,
+  masked: 3,
+  ambiguous: 4,
+}
+
+message TypeAttr {
+  name: vu32,
+  abi_type: vu32,
+  prog_type_off: vu32,
+  mapped_any_off: vu32,
+  mapped_att_off: vu32,
+  sbi_type: u8,
+  precision: u8,
+  flags: TypeAttrFlags,
+}
+
+bitfield TypeAttrFlags {
+  nullable: 0,
+  mapped: 1,
+}
+
+message Functions {
+  @done_if_zero
+  byte_size: u64,
+  nb_functions: u32,
+  functions: Function[nb_functions],
+}
+
+message Function {
+  module: vu32,
+  type: vu32,
+  name: vu32,
+  lib: vu32,
+  arity: vu32,
+  params: FnParam[arity],
+  return_type: vu32,
+  flags: FnParam,
+}
+
+bitfield FunctionFlags {
+  return_nullable: 0,
+}
+
+message FnParam {
+  nullable: u8,
+  type: vu32,
+  name: vu32,
+}
