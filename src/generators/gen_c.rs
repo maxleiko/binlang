@@ -1,56 +1,49 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 
+use topological_sort::TopologicalSort;
+
+use crate::hir::*;
+use crate::symbols::SymbolId;
 use crate::{ast::*, error::ParseError, parser::parse};
 
 pub fn generate_c(source: &str) -> Result<String, ParseError> {
     let file = parse(source)?;
     // eprintln!("{file:#?}");
+    let hir = Hir::new(&file);
+    eprintln!("{hir:#?}");
     let mut out = String::with_capacity(8000);
 
     writeln!(out, "#include \"binlang.h\"\n");
 
-    let mut types: HashSet<&str> = HashSet::new();
-    let mut graph: HashMap<&str, HashSet<&str>> = HashMap::new();
-
-    // 1. collect types
-    for def in &file.defs {
-        match def {
-            TopLevel::Message(message) => {
-                types.insert(&message.name);
-            }
-            TopLevel::Bitfield(bitfield) => {
-                // types.insert(&bitfield.name);
-            }
-        }
-    }
-
-    // 2. build dependency graph
-    for def in &file.defs {
-        match def {
-            TopLevel::Message(msg) => {
-                let mut used = HashSet::new();
-
-                for field in &msg.fields {
-                    collect_deps_from_type(&field.ty, &types, &mut used);
-                }
-
-                graph.insert(&msg.name, used);
-            }
-            TopLevel::Bitfield(bf) => {
-                writeln!(out, "typedef uint8_t {};", to_c_name(&bf.name, true));
+    let mut ts2 = TopologicalSort::<SymbolId>::new();
+    for ty in hir.iter_messages() {
+        eprintln!("message: {} ({:?})", hir.symbols.get(ty.name).unwrap(), ty.name);
+        for field in &ty.fields {
+            let field_ty = hir.types.get(&field.ty).unwrap();
+            if field_ty.is_message() {
+                eprintln!(
+                    "  dep: {} -> {}",
+                    hir.symbols.get(field.ty).unwrap(),
+                    hir.symbols.get(ty.name).unwrap()
+                );
+                ts2.add_dependency(field.ty, ty.name);
             }
         }
     }
-
-    // 3. topological sort
-    let sorted = topo_sort(&graph);
-    for struct_name in sorted {
-        writeln!(
-            out,
-            "typedef struct {struct_name} {};",
-            to_c_name(struct_name, true)
-        );
+    eprintln!("====");
+    loop {
+        let mut v = ts2.pop_all();
+        if v.is_empty() {
+            break;
+        }
+        v.sort();
+        for id in v {
+            let struct_name = hir.symbols.get(id).unwrap();
+            let typedef_name = to_c_name(struct_name, true);
+            eprintln!("{struct_name} {typedef_name}");
+            writeln!(out, "typedef struct {struct_name} {typedef_name};");
+        }
     }
 
     out.push('\n');
@@ -171,49 +164,59 @@ fn collect_deps_from_type<'a>(
         TypeExpr::Ident(TypeIdent::Custom(name))
         | TypeExpr::ArrayNoField(TypeIdent::Custom(name))
         | TypeExpr::ArrayWithField(TypeIdent::Custom(name), _) => {
-            if types.contains(name.as_str()) {
-                acc.insert(name);
-            }
+            acc.insert(name);
+            // if types.contains(name.as_str()) {
+            // }
         }
         _ => (),
     }
 }
 
-fn topo_sort<'a>(graph: &HashMap<&'a str, HashSet<&'a str>>) -> Vec<&'a str> {
-    let mut visited = HashSet::new();
-    let mut temp = HashSet::new();
-    let mut out = Vec::new();
-
-    for node in graph.keys() {
-        visit(node, graph, &mut visited, &mut temp, &mut out);
-    }
-
-    out
-}
-
-fn visit<'a>(
-    node: &'a str,
+fn depth_first_search_visit<'a>(
     graph: &HashMap<&'a str, HashSet<&'a str>>,
-    visited: &mut HashSet<&'a str>,
-    temp: &mut HashSet<&'a str>,
-    out: &mut Vec<&'a str>,
+    node: &'a str,
+    edges: &HashSet<&'a str>,
+    ordered: &mut VecDeque<&'a str>,
+    permanents: &mut HashSet<&'a str>,
+    temporaries: &mut HashSet<&'a str>,
 ) {
-    if visited.contains(node) {
+    if permanents.contains(node) {
         return;
     }
-    if temp.contains(node) {
-        panic!("cyclic dependency involving {}", node);
+    if temporaries.contains(node) {
+        panic!("cyclic dependency found for {node}");
     }
 
-    temp.insert(node);
+    temporaries.insert(node);
 
-    if let Some(neighbors) = graph.get(node) {
-        for neighbor in neighbors {
-            visit(neighbor, graph, visited, temp, out);
+    for edge in edges {
+        if let Some(m_edges) = graph.get(edge) {
+            depth_first_search_visit(graph, edge, m_edges, ordered, permanents, temporaries);
         }
     }
 
-    temp.remove(node);
-    visited.insert(node);
-    out.push(node);
+    permanents.insert(node);
+    ordered.push_front(node)
+}
+
+fn depth_first_search_sort<'a>(graph: &HashMap<&'a str, HashSet<&'a str>>) -> Vec<&'a str> {
+    let mut ordered = VecDeque::new();
+    let mut permanents = HashSet::new();
+    let mut temporaries = HashSet::new();
+
+    for (node, edges) in graph {
+        if permanents.contains(*node) {
+            return ordered.into();
+        }
+        depth_first_search_visit(
+            graph,
+            node,
+            edges,
+            &mut ordered,
+            &mut permanents,
+            &mut temporaries,
+        );
+    }
+
+    ordered.into()
 }

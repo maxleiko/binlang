@@ -3,6 +3,8 @@
 mod lexer;
 mod parser;
 mod ast;
+mod hir;
+mod symbols;
 mod generators;
 pub mod error;
 

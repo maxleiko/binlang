@@ -47,7 +47,7 @@ pub enum TypeIdent {
     Custom(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum NativeType {
     U8,
     U16,
