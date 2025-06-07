@@ -6,6 +6,7 @@ use crate::{
 };
 
 pub struct Hir {
+    pub root: SymbolId,
     pub symbols: Symbols,
     pub natives: NativeTypeSymbols,
     pub types: HashMap<SymbolId, Type>,
@@ -14,6 +15,7 @@ pub struct Hir {
 impl Hir {
     pub fn new(file: &File) -> Self {
         let mut symbols = Symbols::new();
+        let mut root = symbols.insert("");
         let mut natives = NativeTypeSymbols::new(&mut symbols);
         let mut types = HashMap::new();
 
@@ -72,6 +74,7 @@ impl Hir {
         }
 
         Self {
+            root,
             symbols,
             natives,
             types,
@@ -81,10 +84,6 @@ impl Hir {
     pub fn iter_messages(&self) -> impl Iterator<Item = &MessageType> {
         self.types.iter().filter_map(|(&k, v)| match v {
             Type::Message(ty) => Some(ty),
-            Type::Array(id) => match self.types.get(id).unwrap() {
-                Type::Message(ty) => Some(ty),
-                _ => None,
-            },
             _ => None,
         })
     }

@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 
 use topological_sort::TopologicalSort;
@@ -9,89 +10,137 @@ use crate::{ast::*, error::ParseError, parser::parse};
 
 pub fn generate_c(source: &str) -> Result<String, ParseError> {
     let file = parse(source)?;
-    // eprintln!("{file:#?}");
+    // log::debug!("{file:#?}");
     let hir = Hir::new(&file);
-    eprintln!("{hir:#?}");
+    log::debug!("{hir:#?}");
     let mut out = String::with_capacity(8000);
 
     writeln!(out, "#include \"binlang.h\"\n");
 
     let mut ts2 = TopologicalSort::<SymbolId>::new();
-    for ty in hir.iter_messages() {
-        eprintln!("message: {} ({:?})", hir.symbols.get(ty.name).unwrap(), ty.name);
-        for field in &ty.fields {
-            let field_ty = hir.types.get(&field.ty).unwrap();
-            if field_ty.is_message() {
-                eprintln!(
-                    "  dep: {} -> {}",
-                    hir.symbols.get(field.ty).unwrap(),
-                    hir.symbols.get(ty.name).unwrap()
-                );
-                ts2.add_dependency(field.ty, ty.name);
+    for (id, ty) in &hir.types {
+        match ty {
+            Type::Message(ty) => {
+                log::info!("message: {}", hir.symbols.get(ty.name).unwrap());
+                ts2.add_dependency(ty.name, hir.root);
+                for field in &ty.fields {
+                    let field_ty = hir.types.get(&field.ty).unwrap();
+                    if field_ty.is_message() {
+                        ts2.add_dependency(field.ty, ty.name);
+                    }
+                }
+            }
+            Type::Bitfield(ty) => {
+                log::info!("bitfield: {}", hir.symbols.get(ty.name).unwrap());
+                ts2.add_dependency(ty.name, hir.root);
+            }
+            Type::Native(ty) => {
+                log::info!("native: {ty:?}");
+            }
+            Type::Array(gen_id) => {
+                log::info!("array: {}", hir.symbols.get(*gen_id).unwrap());
             }
         }
     }
-    eprintln!("====");
+
+    let mut sorted = Vec::new();
+
     loop {
         let mut v = ts2.pop_all();
         if v.is_empty() {
             break;
         }
         v.sort();
-        for id in v {
-            let struct_name = hir.symbols.get(id).unwrap();
-            let typedef_name = to_c_name(struct_name, true);
-            eprintln!("{struct_name} {typedef_name}");
-            writeln!(out, "typedef struct {struct_name} {typedef_name};");
+        for id in v.iter().rev() {
+            if *id != hir.root {
+                let ty = hir.types.get(id).unwrap();
+                sorted.push(ty);
+            }
         }
+    }
+
+    for ty in &sorted {
+        generate_forward_decl(&hir, ty, &mut out);
     }
 
     out.push('\n');
 
-    generate(&file, &mut out);
+    for ty in &sorted {
+        if let Type::Bitfield(bitfield) = ty {
+            generate_bitfield(&hir, bitfield, &mut out);
+        }
+    }
+
+    for ty in &sorted {
+        generate_type(&hir, ty, &mut out);
+    }
+
     Ok(out)
 }
 
-fn generate(file: &File, out: &mut String) {
-    for def in &file.defs {
-        match def {
-            TopLevel::Message(msg) => {
-                generate_message(msg, out);
-            }
-            TopLevel::Bitfield(bitfield) => {
-                generate_bitfield(bitfield, out);
-            }
+fn generate_forward_decl(hir: &Hir, ty: &Type, out: &mut String) {
+    match ty {
+        Type::Message(ty) => {
+            let struct_name = hir.symbols.get(ty.name).unwrap();
+            let typedef = to_c_name(struct_name, true);
+            writeln!(out, "typedef struct {struct_name} {typedef};");
         }
+        Type::Bitfield(ty) => {
+            let struct_name = hir.symbols.get(ty.name).unwrap();
+            let typedef = to_c_name(struct_name, true);
+            writeln!(out, "typedef int8_t {typedef};");
+        }
+        Type::Native(native_type) => todo!(),
+        Type::Array(symbol_id) => todo!(),
     }
 }
 
-fn generate_message(msg: &Message, out: &mut String) {
-    out.push_str(&format!("struct {} {{\n", &msg.name));
+fn generate_type(hir: &Hir, ty: &Type, out: &mut String) {
+    match ty {
+        Type::Message(ty) => generate_message(hir, ty, out),
+        Type::Bitfield(ty) => {}
+        Type::Native(ty) => {}
+        Type::Array(type_id) => {}
+    }
+}
+
+fn generate_message(hir: &Hir, msg: &MessageType, out: &mut String) {
+    out.push_str(&format!(
+        "struct {} {{\n",
+        hir.symbols.get(msg.name).unwrap()
+    ));
 
     for field in &msg.fields {
-        if let Some(deco) = &field.decorator {
-            out.push_str(&format!("  // @{}\n", deco));
-        }
-
+        let field_ty = hir.types.get(&field.ty).unwrap();
         out.push_str("  ");
-        generate_type_expr(&field.ty, out);
+        match field_ty {
+            Type::Array(generic_type) => {
+                out.push_str("BlArray(");
+                out.push_str(&to_c_name(hir.symbols.get(*generic_type).unwrap(), true));
+                out.push(')');
+            }
+            _ => {
+                out.push_str(&to_c_name(hir.symbols.get(field.ty).unwrap(), true));
+            }
+        }
         out.push(' ');
-        out.push_str(&field.name);
+        out.push_str(hir.symbols.get(field.name).unwrap());
         out.push_str(";\n");
     }
 
     out.push_str("};\n\n");
 }
 
-fn generate_bitfield(bitfield: &Bitfield, out: &mut String) {
-    out.push_str("// Bitfield: ");
-    out.push_str(&bitfield.name);
+fn generate_bitfield(hir: &Hir, bitfield: &BitfieldType, out: &mut String) {
+    let name = hir.symbols.get(bitfield.name).unwrap();
+    out.push_str("/// Bitfield: ");
+    out.push_str(name);
     out.push('\n');
     for flag in &bitfield.flags {
         out.push_str("#define ");
-        out.push_str(&bitfield.name.to_uppercase());
+        out.push_str(&to_c_name(name, false).to_uppercase());
         out.push('_');
-        out.push_str(&flag.name.to_uppercase());
+        out.push_str(&to_c_name(hir.symbols.get(flag.name).unwrap(), false).to_uppercase());
         out.push_str(" (1 << ");
         writeln!(out, "{})", flag.offset);
     }
@@ -131,7 +180,19 @@ fn generate_type_ident(ty: &TypeIdent, out: &mut String) {
 }
 
 #[allow(dead_code)]
-fn to_c_name(input: &str, as_type: bool) -> String {
+fn to_c_name(input: &str, as_type: bool) -> Cow<'_, str> {
+    match input {
+        "u8" => return Cow::Borrowed("uint8_t"),
+        "u16" => return Cow::Borrowed("uint16_t"),
+        "u32" | "vu32" => return Cow::Borrowed("uint32_t"),
+        "u64" | "vu64" => return Cow::Borrowed("uint64_t"),
+        "i8" => return Cow::Borrowed("int8_t"),
+        "i16" => return Cow::Borrowed("int16_t"),
+        "i32" | "vi32" => return Cow::Borrowed("int32_t"),
+        "i64" | "vi64" => return Cow::Borrowed("int64_t"),
+        _ => (),
+    }
+
     let mut out = String::with_capacity(input.len() + 2);
     let mut prev_lowercase = false;
 
@@ -152,7 +213,7 @@ fn to_c_name(input: &str, as_type: bool) -> String {
         out.push_str("_t");
     }
 
-    out
+    Cow::Owned(out)
 }
 
 fn collect_deps_from_type<'a>(
@@ -170,53 +231,4 @@ fn collect_deps_from_type<'a>(
         }
         _ => (),
     }
-}
-
-fn depth_first_search_visit<'a>(
-    graph: &HashMap<&'a str, HashSet<&'a str>>,
-    node: &'a str,
-    edges: &HashSet<&'a str>,
-    ordered: &mut VecDeque<&'a str>,
-    permanents: &mut HashSet<&'a str>,
-    temporaries: &mut HashSet<&'a str>,
-) {
-    if permanents.contains(node) {
-        return;
-    }
-    if temporaries.contains(node) {
-        panic!("cyclic dependency found for {node}");
-    }
-
-    temporaries.insert(node);
-
-    for edge in edges {
-        if let Some(m_edges) = graph.get(edge) {
-            depth_first_search_visit(graph, edge, m_edges, ordered, permanents, temporaries);
-        }
-    }
-
-    permanents.insert(node);
-    ordered.push_front(node)
-}
-
-fn depth_first_search_sort<'a>(graph: &HashMap<&'a str, HashSet<&'a str>>) -> Vec<&'a str> {
-    let mut ordered = VecDeque::new();
-    let mut permanents = HashSet::new();
-    let mut temporaries = HashSet::new();
-
-    for (node, edges) in graph {
-        if permanents.contains(*node) {
-            return ordered.into();
-        }
-        depth_first_search_visit(
-            graph,
-            node,
-            edges,
-            &mut ordered,
-            &mut permanents,
-            &mut temporaries,
-        );
-    }
-
-    ordered.into()
 }
