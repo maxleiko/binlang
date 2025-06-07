@@ -1,84 +1,74 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
+use std::fs::File;
+use std::io::Write;
+use std::io::{BufReader, BufWriter, LineWriter};
+use std::path::Path;
 
+use anyhow::Result;
 use topological_sort::TopologicalSort;
 
 use crate::hir::*;
 use crate::symbols::SymbolId;
 use crate::{ast::*, error::ParseError, parser::parse};
 
-pub fn generate_c(source: &str) -> Result<String, ParseError> {
+pub fn generate_c(filename: &str, source: &str, outdir: &Path) -> Result<()> {
     let file = parse(source)?;
-    // log::debug!("{file:#?}");
     let hir = Hir::new(&file);
+    let sorted = topological_sort(&hir);
     log::debug!("{hir:#?}");
-    let mut out = String::with_capacity(8000);
 
-    writeln!(out, "#include \"binlang.h\"\n");
+    generate_header_file(filename, outdir, &hir, &sorted)?;
+    generate_impl_file(filename, outdir, &hir, &sorted)?;
 
-    let mut ts2 = TopologicalSort::<SymbolId>::new();
-    for (id, ty) in &hir.types {
-        match ty {
-            Type::Message(ty) => {
-                log::info!("message: {}", hir.symbols.get(ty.name).unwrap());
-                ts2.add_dependency(ty.name, hir.root);
-                for field in &ty.fields {
-                    let field_ty = hir.types.get(&field.ty).unwrap();
-                    if field_ty.is_message() {
-                        ts2.add_dependency(field.ty, ty.name);
-                    }
-                }
-            }
-            Type::Bitfield(ty) => {
-                log::info!("bitfield: {}", hir.symbols.get(ty.name).unwrap());
-                ts2.add_dependency(ty.name, hir.root);
-            }
-            Type::Native(ty) => {
-                log::info!("native: {ty:?}");
-            }
-            Type::Array(gen_id) => {
-                log::info!("array: {}", hir.symbols.get(*gen_id).unwrap());
-            }
-        }
-    }
-
-    let mut sorted = Vec::new();
-
-    loop {
-        let mut v = ts2.pop_all();
-        if v.is_empty() {
-            break;
-        }
-        v.sort();
-        for id in v.iter().rev() {
-            if *id != hir.root {
-                let ty = hir.types.get(id).unwrap();
-                sorted.push(ty);
-            }
-        }
-    }
-
-    for ty in &sorted {
-        generate_forward_decl(&hir, ty, &mut out);
-    }
-
-    out.push('\n');
-
-    for ty in &sorted {
-        if let Type::Bitfield(bitfield) = ty {
-            generate_bitfield(&hir, bitfield, &mut out);
-        }
-    }
-
-    for ty in &sorted {
-        generate_type(&hir, ty, &mut out);
-    }
-
-    Ok(out)
+    Ok(())
 }
 
-fn generate_forward_decl(hir: &Hir, ty: &Type, out: &mut String) {
+fn generate_header_file(filename: &str, outdir: &Path, hir: &Hir, sorted: &[&Type]) -> Result<()> {
+    let mut file = File::create(outdir.join(format!("{filename}.h")))?;
+    let mut buf = BufWriter::new(file);
+
+    writeln!(buf, "#ifndef BINLANG_{filename}_H_");
+    writeln!(buf, "#define BINLANG_{filename}_H_");
+    writeln!(buf);
+    writeln!(buf, "#include \"binlang.h\"");
+    writeln!(buf);
+
+    for ty in sorted {
+        generate_forward_decl(hir, ty, &mut buf);
+    }
+
+    writeln!(buf);
+
+    for ty in sorted {
+        if let Type::Bitfield(bitfield) = ty {
+            generate_bitfield(hir, bitfield, &mut buf);
+        }
+    }
+
+    for ty in sorted {
+        generate_type(hir, ty, &mut buf);
+    }
+
+    writeln!(buf, "#endif // BINLANG_{filename}_H_");
+
+    let inner = buf.into_inner()?;
+
+    Ok(())
+}
+
+fn generate_impl_file(filename: &str, outdir: &Path, hir: &Hir, sorted: &[&Type]) -> Result<()> {
+    let mut file = File::create(outdir.join(format!("{filename}.c")))?;
+    let mut buf = BufWriter::new(file);
+
+    writeln!(buf, "#include \"{filename}.h\"");
+    writeln!(buf);
+
+    Ok(())
+}
+
+fn generate_forward_decl<W: Write>(hir: &Hir, ty: &Type, out: &mut W) {
     match ty {
         Type::Message(ty) => {
             let struct_name = hir.symbols.get(ty.name).unwrap();
@@ -90,12 +80,11 @@ fn generate_forward_decl(hir: &Hir, ty: &Type, out: &mut String) {
             let typedef = to_c_name(struct_name, true);
             writeln!(out, "typedef int8_t {typedef};");
         }
-        Type::Native(native_type) => todo!(),
-        Type::Array(symbol_id) => todo!(),
+        _ => (),
     }
 }
 
-fn generate_type(hir: &Hir, ty: &Type, out: &mut String) {
+fn generate_type<W: Write>(hir: &Hir, ty: &Type, out: &mut W) {
     match ty {
         Type::Message(ty) => generate_message(hir, ty, out),
         Type::Bitfield(ty) => {}
@@ -104,58 +93,60 @@ fn generate_type(hir: &Hir, ty: &Type, out: &mut String) {
     }
 }
 
-fn generate_message(hir: &Hir, msg: &MessageType, out: &mut String) {
-    out.push_str(&format!(
-        "struct {} {{\n",
-        hir.symbols.get(msg.name).unwrap()
-    ));
+fn generate_message<W: Write>(hir: &Hir, msg: &MessageType, out: &mut W) {
+    writeln!(out, "struct {} {{", hir.symbols.get(msg.name).unwrap());
 
     for field in &msg.fields {
         let field_ty = hir.types.get(&field.ty).unwrap();
-        out.push_str("  ");
+        write!(out, "  ");
         match field_ty {
             Type::Array(generic_type) => {
-                out.push_str("BlArray(");
-                out.push_str(&to_c_name(hir.symbols.get(*generic_type).unwrap(), true));
-                out.push(')');
+                write!(
+                    out,
+                    "BlArray({})",
+                    to_c_name(hir.symbols.get(*generic_type).unwrap(), true)
+                );
             }
             _ => {
-                out.push_str(&to_c_name(hir.symbols.get(field.ty).unwrap(), true));
+                write!(
+                    out,
+                    "{}",
+                    to_c_name(hir.symbols.get(field.ty).unwrap(), true)
+                );
             }
         }
-        out.push(' ');
-        out.push_str(hir.symbols.get(field.name).unwrap());
-        out.push_str(";\n");
+        writeln!(out, " {};", hir.symbols.get(field.name).unwrap());
     }
 
-    out.push_str("};\n\n");
+    writeln!(out, "}};\n");
 }
 
-fn generate_bitfield(hir: &Hir, bitfield: &BitfieldType, out: &mut String) {
+fn generate_bitfield<W: Write>(hir: &Hir, bitfield: &BitfieldType, out: &mut W) {
     let name = hir.symbols.get(bitfield.name).unwrap();
-    out.push_str("/// Bitfield: ");
-    out.push_str(name);
-    out.push('\n');
+    writeln!(out, "/// Bitfield: {name}");
+
+    let upper_name = to_c_name(name, false).to_uppercase();
     for flag in &bitfield.flags {
-        out.push_str("#define ");
-        out.push_str(&to_c_name(name, false).to_uppercase());
-        out.push('_');
-        out.push_str(&to_c_name(hir.symbols.get(flag.name).unwrap(), false).to_uppercase());
-        out.push_str(" (1 << ");
-        writeln!(out, "{})", flag.offset);
+        let upper_flag_name = to_c_name(hir.symbols.get(flag.name).unwrap(), false).to_uppercase();
+        writeln!(
+            out,
+            "#define {upper_name}_{upper_flag_name} (1 << {})",
+            flag.offset
+        );
     }
-    out.push('\n');
+
+    writeln!(out);
 }
 
-fn generate_type_expr(ty: &TypeExpr, out: &mut String) {
+fn generate_type_expr<W: Write>(ty: &TypeExpr, out: &mut W) {
     match ty {
         TypeExpr::Ident(ident) => {
             generate_type_ident(ident, out);
         }
         TypeExpr::ArrayNoField(ident) => {
-            out.push_str("BlArray(");
+            write!(out, "BlArray(");
             generate_type_ident(ident, out);
-            out.push(')');
+            write!(out, ")");
         }
         TypeExpr::ArrayWithField(ident, _) => {
             generate_type_ident(ident, out);
@@ -163,19 +154,22 @@ fn generate_type_expr(ty: &TypeExpr, out: &mut String) {
     }
 }
 
-fn generate_type_ident(ty: &TypeIdent, out: &mut String) {
+fn generate_type_ident<W: Write>(
+    ty: &TypeIdent,
+    out: &mut W,
+) -> std::result::Result<(), std::io::Error> {
     match ty {
         TypeIdent::Native(native) => match native {
-            NativeType::U8 => out.push_str("uint8_t"),
-            NativeType::U16 => out.push_str("uint16_t"),
-            NativeType::U32 | NativeType::VU32 => out.push_str("uint32_t"),
-            NativeType::U64 | NativeType::VU64 => out.push_str("uint64_t"),
-            NativeType::I8 => out.push_str("int8_t"),
-            NativeType::I16 => out.push_str("int16_t"),
-            NativeType::I32 | NativeType::VI32 => out.push_str("int32_t"),
-            NativeType::I64 | NativeType::VI64 => out.push_str("int64_t"),
+            NativeType::U8 => write!(out, "uint8_t"),
+            NativeType::U16 => write!(out, "uint16_t"),
+            NativeType::U32 | NativeType::VU32 => write!(out, "uint32_t"),
+            NativeType::U64 | NativeType::VU64 => write!(out, "uint64_t"),
+            NativeType::I8 => write!(out, "int8_t"),
+            NativeType::I16 => write!(out, "int16_t"),
+            NativeType::I32 | NativeType::VI32 => write!(out, "int32_t"),
+            NativeType::I64 | NativeType::VI64 => write!(out, "int64_t"),
         },
-        TypeIdent::Custom(name) => out.push_str(&to_c_name(name, true)),
+        TypeIdent::Custom(name) => write!(out, "{}", to_c_name(name, true)),
     }
 }
 
@@ -216,19 +210,43 @@ fn to_c_name(input: &str, as_type: bool) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
-fn collect_deps_from_type<'a>(
-    ty: &'a TypeExpr,
-    types: &HashSet<&'a str>,
-    acc: &mut HashSet<&'a str>,
-) {
-    match ty {
-        TypeExpr::Ident(TypeIdent::Custom(name))
-        | TypeExpr::ArrayNoField(TypeIdent::Custom(name))
-        | TypeExpr::ArrayWithField(TypeIdent::Custom(name), _) => {
-            acc.insert(name);
-            // if types.contains(name.as_str()) {
-            // }
+fn topological_sort(hir: &Hir) -> Vec<&Type> {
+    let mut ts2 = TopologicalSort::<SymbolId>::new();
+    for (id, ty) in &hir.types {
+        match ty {
+            Type::Message(ty) => {
+                log::debug!("message: {}", hir.symbols.get(ty.name).unwrap());
+                ts2.add_dependency(ty.name, hir.root);
+                for field in &ty.fields {
+                    let field_ty = hir.types.get(&field.ty).unwrap();
+                    if field_ty.is_message() {
+                        ts2.add_dependency(field.ty, ty.name);
+                    }
+                }
+            }
+            Type::Bitfield(ty) => {
+                log::debug!("bitfield: {}", hir.symbols.get(ty.name).unwrap());
+                ts2.add_dependency(ty.name, hir.root);
+            }
+            _ => (),
         }
-        _ => (),
     }
+
+    let mut sorted = Vec::new();
+
+    loop {
+        let mut v = ts2.pop_all();
+        if v.is_empty() {
+            break;
+        }
+        v.sort();
+        for id in v.iter().rev() {
+            if *id != hir.root {
+                let ty = hir.types.get(id).unwrap();
+                sorted.push(ty);
+            }
+        }
+    }
+
+    sorted
 }

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{
     ast::*,
@@ -8,15 +8,15 @@ use crate::{
 pub struct Hir {
     pub root: SymbolId,
     pub symbols: Symbols,
-    pub natives: NativeTypeSymbols,
+    // natives: NativeTypeSymbols,
     pub types: HashMap<SymbolId, Type>,
 }
 
 impl Hir {
     pub fn new(file: &File) -> Self {
         let mut symbols = Symbols::new();
-        let mut root = symbols.insert("");
-        let mut natives = NativeTypeSymbols::new(&mut symbols);
+        let root = symbols.insert("");
+        let natives = NativeTypeSymbols::new(&mut symbols);
         let mut types = HashMap::new();
 
         types.insert(natives.i8, Type::Native(NativeType::I8));
@@ -36,7 +36,7 @@ impl Hir {
             match def {
                 TopLevel::Message(message) => {
                     let id = symbols.insert(&message.name);
-                    let mut ty = MessageType::new(id);
+                    let ty = MessageType::new(id);
                     types.insert(id, Type::Message(ty));
                 }
                 TopLevel::Bitfield(bitfield) => {
@@ -76,16 +76,9 @@ impl Hir {
         Self {
             root,
             symbols,
-            natives,
+            // natives,
             types,
         }
-    }
-
-    pub fn iter_messages(&self) -> impl Iterator<Item = &MessageType> {
-        self.types.iter().filter_map(|(&k, v)| match v {
-            Type::Message(ty) => Some(ty),
-            _ => None,
-        })
     }
 }
 
@@ -250,6 +243,7 @@ pub enum Type {
     Array(SymbolId),
 }
 
+#[allow(unused)]
 impl Type {
     pub fn is_message(&self) -> bool {
         matches!(self, Self::Message(_))

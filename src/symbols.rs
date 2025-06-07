@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use string_interner::{StringInterner, backend::BucketBackend, symbol::SymbolU32};
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -17,6 +15,7 @@ impl Symbols {
         }
     }
 
+    #[allow(unused)]
     pub fn len(&self) -> usize {
         self.interner.len()
     }
