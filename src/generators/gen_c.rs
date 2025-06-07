@@ -65,7 +65,95 @@ fn generate_impl_file(filename: &str, outdir: &Path, hir: &Hir, sorted: &[&Type]
     writeln!(buf, "#include \"{filename}.h\"");
     writeln!(buf);
 
+    let ns = to_c_name(filename, false);
+    for ty in sorted {
+        generate_impl_type(hir, &ns, ty, &mut buf);
+    }
+
     Ok(())
+}
+
+fn generate_impl_type<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
+    match ty {
+        Type::Message(ty) => generate_impl_message(hir, ns, ty, out),
+        Type::Bitfield(ty) => generate_impl_bitfield(hir, ns, ty, out),
+        Type::Native(_ty) => (),
+        Type::Array(_ty) => (),
+    }
+}
+
+/*
+bl_result_t bl_greycat_abi__headers(bl_slice_t *b, headers_t *value) {
+  BL_TRY(bl_slice__read_u16(b, &value->major));
+  BL_TRY(bl_slice__read_u16(b, &value->magic));
+  BL_TRY(bl_slice__read_u16(b, &value->version));
+  BL_TRY(bl_slice__read_u64(b, &value->crc));
+  return gc_result_ok;
+}
+*/
+
+fn generate_impl_message<W: Write>(hir: &Hir, ns: &str, ty: &MessageType, out: &mut W) {
+    let name = hir.symbols.get(ty.name).unwrap();
+    let typedef = to_c_name(name, true);
+    let fn_name = to_c_name(name, false);
+    writeln!(
+        out,
+        "bl_result_t bl_{ns}__read_{fn_name}(bl_slice_t *b, {typedef} *value) {{"
+    );
+    for field in &ty.fields {
+        write!(out, "  BL_TRY(bl_");
+        let field_ty = hir.types.get(&field.ty).unwrap();
+        match field_ty {
+            Type::Message(ty) => {
+                let f_name = hir.symbols.get(field.name).unwrap();
+                let f_ty_name = hir.symbols.get(ty.name).unwrap();
+                let f_typedef = to_c_name(f_ty_name, true);
+                let f_ty_fn_name = to_c_name(f_ty_name, false);
+                write!(out, "{ns}__read_{f_ty_fn_name}(b, &value->{f_name})");
+            }
+            Type::Bitfield(ty) => {
+                // TODO
+                write!(out, "TODO/* bitfield: {} */(b, NULL)", hir.symbols.get(ty.name).unwrap());
+            }
+            Type::Native(ty) => {
+                let f_name = hir.symbols.get(field.name).unwrap();
+                match ty {
+                    NativeType::U8 => write!(out, "slice__read_u8(b, &value->{f_name})"),
+                    NativeType::U16 => write!(out, "slice__read_u16(b, &value->{f_name})"),
+                    NativeType::U32 => write!(out, "slice__read_u32(b, &value->{f_name})"),
+                    NativeType::U64 => write!(out, "slice__read_u64(b, &value->{f_name})"),
+                    NativeType::I8 => write!(out, "slice__read_i8(b, &value->{f_name})"),
+                    NativeType::I16 => write!(out, "slice__read_i16(b, &value->{f_name})"),
+                    NativeType::I32 => write!(out, "slice__read_i32(b, &value->{f_name})"),
+                    NativeType::I64 => write!(out, "slice__read_i64(b, &value->{f_name})"),
+                    NativeType::VU32 => write!(out, "slice__read_vu32(b, &value->{f_name})"),
+                    NativeType::VU64 => write!(out, "slice__read_vu64(b, &value->{f_name})"),
+                    NativeType::VI32 => write!(out, "slice__read_vi32(b, &value->{f_name})"),
+                    NativeType::VI64 => write!(out, "slice__read_vi64(b, &value->{f_name})"),
+                };
+            }
+            Type::Array(symbol_id) => {
+                // TODO
+                write!(out, "TODO/* array: {} */(b, NULL)", hir.symbols.get(*symbol_id).unwrap());
+            }
+        }
+        writeln!(out, ");");
+    }
+    writeln!(out, "  return bl_result_ok;");
+    writeln!(out, "}}");
+}
+
+fn generate_impl_bitfield<W: Write>(hir: &Hir, ns: &str, ty: &BitfieldType, out: &mut W) {
+    let name = hir.symbols.get(ty.name).unwrap();
+    let typedef = to_c_name(name, true);
+    let fn_name = to_c_name(name, false);
+    writeln!(
+        out,
+        "bl_result_t bl_{ns}__read_{fn_name}(bl_slice_t *b, {typedef} *value) {{"
+    );
+    // TODO
+    writeln!(out, "  return bl_result_err;");
+    writeln!(out, "}}");
 }
 
 fn generate_forward_decl<W: Write>(hir: &Hir, ty: &Type, out: &mut W) {
@@ -138,42 +226,6 @@ fn generate_bitfield<W: Write>(hir: &Hir, bitfield: &BitfieldType, out: &mut W) 
     writeln!(out);
 }
 
-fn generate_type_expr<W: Write>(ty: &TypeExpr, out: &mut W) {
-    match ty {
-        TypeExpr::Ident(ident) => {
-            generate_type_ident(ident, out);
-        }
-        TypeExpr::ArrayNoField(ident) => {
-            write!(out, "BlArray(");
-            generate_type_ident(ident, out);
-            write!(out, ")");
-        }
-        TypeExpr::ArrayWithField(ident, _) => {
-            generate_type_ident(ident, out);
-        }
-    }
-}
-
-fn generate_type_ident<W: Write>(
-    ty: &TypeIdent,
-    out: &mut W,
-) -> std::result::Result<(), std::io::Error> {
-    match ty {
-        TypeIdent::Native(native) => match native {
-            NativeType::U8 => write!(out, "uint8_t"),
-            NativeType::U16 => write!(out, "uint16_t"),
-            NativeType::U32 | NativeType::VU32 => write!(out, "uint32_t"),
-            NativeType::U64 | NativeType::VU64 => write!(out, "uint64_t"),
-            NativeType::I8 => write!(out, "int8_t"),
-            NativeType::I16 => write!(out, "int16_t"),
-            NativeType::I32 | NativeType::VI32 => write!(out, "int32_t"),
-            NativeType::I64 | NativeType::VI64 => write!(out, "int64_t"),
-        },
-        TypeIdent::Custom(name) => write!(out, "{}", to_c_name(name, true)),
-    }
-}
-
-#[allow(dead_code)]
 fn to_c_name(input: &str, as_type: bool) -> Cow<'_, str> {
     match input {
         "u8" => return Cow::Borrowed("uint8_t"),

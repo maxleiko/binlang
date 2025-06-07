@@ -1,5 +1,6 @@
 #ifndef BINLANG_greycat_abi_H_
 #define BINLANG_greycat_abi_H_
+
 #include "binlang.h"
 
 typedef struct FnParam fn_param_t;
