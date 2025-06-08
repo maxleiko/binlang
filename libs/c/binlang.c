@@ -214,7 +214,7 @@ bl_result_t bl_slice__read_exact(bl_slice_t *b, uint8_t *buf, uint64_t len) {
 
 #ifdef FLOAT
 bl_result_t bl_slice__read_f32(bl_slice_t *b, f32_t *value) {
-  if (b->len < 8) {
+  if (b->len < 4) {
     return bl_result_eof;
   }
   uint8_t *data = b->data;
