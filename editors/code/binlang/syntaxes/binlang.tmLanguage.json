@@ -3,6 +3,9 @@
   "name": "Binlang",
   "patterns": [
     {
+      "include": "#eol_comment"
+    },
+    {
       "include": "#keywords"
     },
     {
@@ -13,6 +16,10 @@
     }
   ],
   "repository": {
+    "eol_comment": {
+      "name": "comment.line.double-slash.bl",
+      "match": "//.*$"
+    },
     "keywords": {
       "patterns": [
         {

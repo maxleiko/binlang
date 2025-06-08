@@ -34,7 +34,8 @@ int read_file(const char *filepath, byte_vec_t *buf) {
 int32_t main(int32_t argc, char *argv[]) {
   // check that a filepath is provided
   if (argc < 2) {
-    fprintf(stderr, "Usage: %s <file>\n", argv[1]);
+    fprintf(stderr, "Usage: %s <filepath>\n\n", argv[1]);
+    fprintf(stderr, "  eg. %s gcdata/abi\n", argv[1]);
     return 1;
   }
 

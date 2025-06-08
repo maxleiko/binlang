@@ -165,6 +165,12 @@ fn generate_impl_message<W: Write>(
                     NativeType::VI64 => {
                         writeln!(out, "BL_TRY(bl_slice__read_vi64(b, &value->{f_name}));")
                     }
+                    NativeType::F32 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_f32(b, &value->{f_name}));")
+                    }
+                    NativeType::F64 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_f64(b, &value->{f_name}));")
+                    }
                 };
             }
             Type::Array(ArrayType::Default(type_id)) => {

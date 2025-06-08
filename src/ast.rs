@@ -61,4 +61,6 @@ pub enum NativeType {
     VU64,
     VI32,
     VI64,
+    F32,
+    F64,
 }

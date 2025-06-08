@@ -238,6 +238,8 @@ pub struct NativeTypeSymbols {
     pub vi64: SymbolId,
     pub vu32: SymbolId,
     pub vu64: SymbolId,
+    pub f32: SymbolId,
+    pub f64: SymbolId,
 }
 
 impl NativeTypeSymbols {
@@ -255,6 +257,8 @@ impl NativeTypeSymbols {
             vi64: symbols.insert("vi64"),
             vu32: symbols.insert("vu32"),
             vu64: symbols.insert("vu64"),
+            f32: symbols.insert("f32"),
+            f64: symbols.insert("f64"),
         }
     }
 
@@ -272,6 +276,8 @@ impl NativeTypeSymbols {
             NativeType::VU64 => self.vu64,
             NativeType::VI32 => self.vi32,
             NativeType::VI64 => self.vi64,
+            NativeType::F32 => self.f32,
+            NativeType::F64 => self.f64,
         }
     }
 }

@@ -177,6 +177,8 @@ impl<'a> Parser<'a> {
                 "vu64" => TypeIdent::Native(NativeType::VU64),
                 "vi32" => TypeIdent::Native(NativeType::VI32),
                 "vi64" => TypeIdent::Native(NativeType::VI64),
+                "f32" => TypeIdent::Native(NativeType::F32),
+                "f64" => TypeIdent::Native(NativeType::F64),
                 name => TypeIdent::Custom(name.to_string()),
             },
             _ => {
