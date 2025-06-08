@@ -80,11 +80,8 @@ fn generate_impl_file(filename: &str, outdir: &Path, hir: &Hir, sorted: &[&Type]
 }
 
 fn generate_impl_type<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
-    match ty {
-        Type::Message(ty) => generate_impl_message(hir, ns, ty, false, out),
-        Type::Bitfield(ty) => generate_impl_bitfield(hir, ns, ty, false, out),
-        Type::Native(_ty) => (),
-        Type::Array(_ty) => (),
+    if let Type::Message(ty) = ty {
+        generate_impl_message(hir, ns, ty, false, out)
     }
 }
 
@@ -230,38 +227,6 @@ fn generate_impl_message<W: Write>(
     writeln!(out, "}}");
 }
 
-// fn generate_impl_message_type_read<W: Write>(hir: &Hir, ns: &str, ty: &MessageType, out: &mut W) {
-//     let f_name = hir.symbols.get(field.name).unwrap();
-//     let f_ty_name = hir.symbols.get(ty.name).unwrap();
-//     let f_typedef = to_c_name(f_ty_name, true);
-//     let f_ty_fn_name = to_c_name(f_ty_name, false);
-//     write!(out, "{ns}__read_{f_ty_fn_name}(b, &value->{f_name})");
-// }
-
-fn generate_impl_bitfield<W: Write>(
-    hir: &Hir,
-    ns: &str,
-    ty: &BitfieldType,
-    forward_decl: bool,
-    out: &mut W,
-) {
-    let name = hir.symbols.get(ty.name).unwrap();
-    let typedef = to_c_name(name, true);
-    let fn_name = to_c_name(name, false);
-    write!(
-        out,
-        "bl_result_t bl_{ns}__read_{fn_name}(bl_unused bl_slice_t *b, bl_unused {typedef} *value)"
-    );
-    if forward_decl {
-        writeln!(out, ";");
-        return;
-    }
-    writeln!(out, " {{");
-    // TODO
-    writeln!(out, "  return bl_result_err;");
-    writeln!(out, "}}");
-}
-
 fn generate_forward_decl<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
     match ty {
         Type::Message(ty) => {
@@ -279,14 +244,8 @@ fn generate_forward_decl<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) 
 }
 
 fn generate_fn_forward_decl<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
-    match ty {
-        Type::Message(ty) => {
-            generate_impl_message(hir, ns, ty, true, out);
-        }
-        Type::Bitfield(ty) => {
-            generate_impl_bitfield(hir, ns, ty, true, out);
-        }
-        _ => (),
+    if let Type::Message(ty) = ty {
+        generate_impl_message(hir, ns, ty, true, out);
     }
 }
 

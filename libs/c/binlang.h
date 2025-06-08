@@ -52,6 +52,4 @@ bl_result_t bl_slice__read_vi64(bl_slice_t *b, int64_t *value);
 
 bl_result_t bl_slice__read_exact(bl_slice_t *b, uint8_t* buf, uint64_t len);
 
-bl_result_t bl_TODO(bl_slice_t *b, void *value);
-
 #endif // binlang_h
