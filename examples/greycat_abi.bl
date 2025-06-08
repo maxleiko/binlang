@@ -40,6 +40,7 @@ message Type {
   nb_attrs: vu32,
   attrs_off: vu32,
   mapped_prog_type_off: vu32,
+  mapped_abi_type_off: vu32,
   masked_abi_type_off: vu32,
   nullable_nb_bytes: vu32,
   flags: TypeFlags,
@@ -71,7 +72,6 @@ bitfield TypeAttrFlags {
 }
 
 message Functions {
-  @done_if_zero
   byte_size: u64,
   nb_functions: u32,
   functions: Function[nb_functions],
@@ -85,7 +85,7 @@ message Function {
   arity: vu32,
   params: FnParam[arity],
   return_type: vu32,
-  flags: FnParam,
+  flags: FunctionFlags,
 }
 
 bitfield FunctionFlags {

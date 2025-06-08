@@ -2,7 +2,7 @@
 
 inline void bl_slice__advance(bl_slice_t *b, size_t n) {
   b->data += n;
-  b->len += n;
+  b->len -= n;
 }
 
 bl_result_t bl_TODO(bl_unused bl_slice_t *b, bl_unused void *value) { return bl_result_err; }

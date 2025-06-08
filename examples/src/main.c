@@ -45,7 +45,8 @@ int32_t main(int32_t argc, char *argv[]) {
 
   bl_slice_t b = {.data = buf.elems, .len = buf.size};
   abi_t abi = {0};
-  bl_greycat_abi__read_abi(&b, &abi);
+  bl_result_t res = bl_greycat_abi__read_abi(&b, &abi);
+  printf("res=%d\n", res);
 
   vec_delete(&buf);
 

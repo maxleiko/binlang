@@ -88,16 +88,6 @@ fn generate_impl_type<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
     }
 }
 
-/*
-bl_result_t bl_greycat_abi__headers(bl_slice_t *b, headers_t *value) {
-  BL_TRY(bl_slice__read_u16(b, &value->major));
-  BL_TRY(bl_slice__read_u16(b, &value->magic));
-  BL_TRY(bl_slice__read_u16(b, &value->version));
-  BL_TRY(bl_slice__read_u64(b, &value->crc));
-  return gc_result_ok;
-}
-*/
-
 fn generate_impl_message<W: Write>(
     hir: &Hir,
     ns: &str,
@@ -120,7 +110,13 @@ fn generate_impl_message<W: Write>(
     let indent = "  ";
     for field in &ty.fields {
         write!(out, "{indent}"); // indent
-        let f_name = hir.symbols.get(field.name).unwrap();
+        let f_name = match field.associated {
+            Some(associated_name) => Cow::Owned(format!(
+                "{}.size",
+                hir.symbols.get(associated_name).unwrap()
+            )),
+            None => Cow::Borrowed(hir.symbols.get(field.name).unwrap()),
+        };
         match hir.types.get(&field.ty).unwrap() {
             Type::Message(ty) => {
                 let f_ty_name = hir.symbols.get(ty.name).unwrap();
@@ -132,12 +128,7 @@ fn generate_impl_message<W: Write>(
                 );
             }
             Type::Bitfield(ty) => {
-                // TODO
-                writeln!(
-                    out,
-                    "BL_TRY(bl_TODO/* bitfield: {} */(b, NULL));",
-                    hir.symbols.get(ty.name).unwrap()
-                );
+                writeln!(out, "BL_TRY(bl_slice__read_u8(b, &value->{f_name}));");
             }
             Type::Native(ty) => {
                 match ty {
@@ -181,11 +172,28 @@ fn generate_impl_message<W: Write>(
             }
             Type::Array(ArrayType::Default(type_id)) => {
                 let elem_ty = hir.symbols.get(*type_id).unwrap();
-                let elem_ty_typedef = to_c_name(elem_ty, true);
-                writeln!(out, "BL_TRY(bl_slice__read_u32(b, &value->{f_name}.size);");
-                writeln!(out, "{indent}for (uint32_t i = 0; i < &value->{f_name}.size; i++) {{");
-                writeln!(out, "{indent}  // TODO read: {elem_ty_typedef}");
-                writeln!(out, "{indent}}}");
+                let elem_ty_name = to_c_name(elem_ty, false);
+                writeln!(out, "BL_TRY(bl_slice__read_u32(b, &value->{f_name}.size));");
+                writeln!(
+                    out,
+                    "{indent}array_reserve(&value->{f_name}, value->{f_name}.size);"
+                );
+                if elem_ty == "u8" {
+                    writeln!(
+                        out,
+                        "{indent}BL_TRY(bl_slice__read_exact(b, value->{f_name}.elems, value->{f_name}.size));"
+                    );
+                } else {
+                    writeln!(
+                        out,
+                        "{indent}for (uint32_t i = 0; i < value->{f_name}.size; i++) {{"
+                    );
+                    writeln!(
+                        out,
+                        "{indent}  BL_TRY(bl_{ns}__read_{elem_ty_name}(b, value->{f_name}.elems + i));"
+                    );
+                    writeln!(out, "{indent}}}");
+                }
             }
             Type::Array(ArrayType::Field {
                 elem_type,
@@ -193,14 +201,28 @@ fn generate_impl_message<W: Write>(
                 field_type,
             }) => {
                 let elem_ty = hir.symbols.get(*elem_type).unwrap();
-                let elem_ty_typedef = to_c_name(elem_ty, true);
-                let field_name = hir.symbols.get(*field_name).unwrap();
-                writeln!(out, "// then read {field_name}*{elem_ty_typedef}");
+                let elem_ty_name = to_c_name(elem_ty, false);
+                let field_ty = hir.symbols.get(*field_type).unwrap();
                 writeln!(
                     out,
-                    "  BL_TRY(bl_TODO/* array: {} */(b, NULL));",
-                    hir.symbols.get(*elem_type).unwrap()
+                    "array_reserve(&value->{f_name}, value->{f_name}.size);"
                 );
+                if elem_ty == "u8" {
+                    writeln!(
+                        out,
+                        "{indent}BL_TRY(bl_slice__read_exact(b, value->{f_name}.elems, value->{f_name}.size));"
+                    );
+                } else {
+                    writeln!(
+                        out,
+                        "{indent}for (uint32_t i = 0; i < value->{f_name}.size; i++) {{"
+                    );
+                    writeln!(
+                        out,
+                        "{indent}  BL_TRY(bl_{ns}__read_{elem_ty_name}(b, value->{f_name}.elems + i));"
+                    );
+                    writeln!(out, "{indent}}}");
+                }
             }
         }
     }
@@ -250,7 +272,7 @@ fn generate_forward_decl<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) 
         Type::Bitfield(ty) => {
             let struct_name = hir.symbols.get(ty.name).unwrap();
             let typedef = to_c_name(struct_name, true);
-            writeln!(out, "typedef int8_t {typedef};");
+            writeln!(out, "typedef uint8_t {typedef};");
         }
         _ => (),
     }
@@ -281,6 +303,10 @@ fn generate_message<W: Write>(hir: &Hir, msg: &MessageType, out: &mut W) {
     writeln!(out, "struct {} {{", hir.symbols.get(msg.name).unwrap());
 
     for field in &msg.fields {
+        if field.associated.is_some() {
+            // skip associated fields in struct as we will use the BlArray .size field
+            continue;
+        }
         let field_ty = hir.types.get(&field.ty).unwrap();
         write!(out, "  ");
         match field_ty {

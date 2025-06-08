@@ -185,7 +185,7 @@ static inline void _array__erase(BlArray *self, size_t element_size,
 /// This is not what you're looking for, see `array_reserve`.
 static inline void _array__reserve(BlArray *self, size_t element_size,
                                    uint32_t size) {
-  if (self->elems == NULL) {
+  if (self->elems == NULL && size > 0) {
     self->elems = bl_malloc(size * element_size);
     self->size = size;
   }

@@ -59,6 +59,7 @@ impl Hir {
                 let mut associated_fields = HashMap::new();
                 for field in &msg.fields {
                     if let TypeExpr::ArrayWithField(ident, associated_name) = &field.ty {
+                        let field_name = symbols.insert(&field.name);
                         let associated_field = msg
                             .fields
                             .iter()
@@ -76,28 +77,31 @@ impl Hir {
                             &mut types,
                             &associated_fields,
                         );
-                        associated_fields.insert(associated_name.as_str(), associated_field_type);
+                        associated_fields.insert(
+                            associated_name.as_str(),
+                            AssociatedField {
+                                array_field: field_name,
+                                ty: associated_field_type,
+                            },
+                        );
                     }
                 }
 
                 let mut fields = Vec::with_capacity(msg.fields.len());
                 for field in &msg.fields {
                     let field_name = symbols.insert(&field.name);
-                    if associated_fields.contains_key(&*field.name) {
-                        // this field is referenced in an array, the array will deal with it
-                    } else {
-                        let field_type = type_expr_to_type_id(
-                            &field.ty,
-                            &mut symbols,
-                            &natives,
-                            &mut types,
-                            &associated_fields,
-                        );
-                        fields.push(Field {
-                            name: field_name,
-                            ty: field_type,
-                        });
-                    }
+                    let field_type = type_expr_to_type_id(
+                        &field.ty,
+                        &mut symbols,
+                        &natives,
+                        &mut types,
+                        &associated_fields,
+                    );
+                    fields.push(Field {
+                        name: field_name,
+                        ty: field_type,
+                        associated: associated_fields.get(&*field.name).map(|a| a.array_field),
+                    });
                 }
                 let msg_name_id = symbols.find(&msg.name).unwrap();
                 if let Type::Message(ty) = types.get_mut(&msg_name_id).unwrap() {
@@ -319,6 +323,7 @@ pub struct MessageType {
 pub struct Field {
     pub name: SymbolId,
     pub ty: SymbolId,
+    pub associated: Option<SymbolId>,
 }
 
 impl MessageType {
@@ -349,12 +354,17 @@ impl BitfieldType {
     }
 }
 
+struct AssociatedField {
+    array_field: SymbolId,
+    ty: SymbolId,
+}
+
 fn type_expr_to_type_id(
     ty: &TypeExpr,
     symbols: &mut Symbols,
     natives: &NativeTypeSymbols,
     types: &mut HashMap<SymbolId, Type>,
-    associated_fields: &HashMap<&str, SymbolId>,
+    associated_fields: &HashMap<&str, AssociatedField>,
 ) -> SymbolId {
     match ty {
         TypeExpr::Ident(ty) => match ty {
@@ -381,7 +391,10 @@ fn type_expr_to_type_id(
             }
         },
         TypeExpr::ArrayWithField(ty, field) => {
-            let associated_type = associated_fields.get(field.as_str()).unwrap();
+            let AssociatedField {
+                ty: associated_type,
+                ..
+            } = associated_fields.get(field.as_str()).unwrap();
             match ty {
                 TypeIdent::Native(native_type) => {
                     let elem_type = natives.type_id(*native_type);
