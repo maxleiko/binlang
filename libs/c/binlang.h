@@ -1,9 +1,17 @@
 #ifndef binlang_h
 #define binlang_h
 
+#ifdef NDEBUG
+#define bl_assert(e) ((void)(e))
+#else
+#include <assert.h>
+#define bl_assert(e) assert(e)
+#endif
+
+#define bl_unused __attribute__((unused))
+
 #include "alloc.h"
 #include "array.h"
-#include "assert.h"
 
 typedef struct {
   uint8_t *data;
@@ -24,6 +32,7 @@ typedef enum {
     }                                                                          \
   } while (0);
 
+void bl_slice__advance(bl_slice_t *b, size_t n);
 /// Read unsigned 8-bit
 bl_result_t bl_slice__read_u8(bl_slice_t *b, uint8_t *value);
 /// Read unsigned 16-bit (little endian)

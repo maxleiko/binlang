@@ -1,1 +1,7 @@
 /target
+/gcdata
+/files
+/project.gcl
+/gen
+/.cache
+/build

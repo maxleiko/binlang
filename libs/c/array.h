@@ -5,8 +5,7 @@
 extern "C" {
 #endif
 
-#include "./alloc.h"
-#include "./assert.h"
+#include "alloc.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -57,7 +56,7 @@ extern "C" {
 
 /// Free any memory allocated for this array. Note that this does not free any
 /// memory allocated for the array's elems.
-#define array_delete(self) _array__delete((Array *)(self))
+#define array_delete(self) _array__delete((BlArray *)(self))
 
 /// Push a new `element` onto the end of the array.
 #define array_push(self, element)                                              \

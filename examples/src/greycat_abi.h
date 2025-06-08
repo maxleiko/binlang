@@ -1,7 +1,7 @@
 #ifndef BINLANG_greycat_abi_H_
 #define BINLANG_greycat_abi_H_
 
-#include "binlang.h"
+#include <binlang.h>
 
 typedef struct FnParam fn_param_t;
 typedef int8_t function_flags_t;
@@ -112,5 +112,19 @@ struct Abi {
   types_t types;
   functions_t functions;
 };
+
+bl_result_t bl_greycat_abi__read_fn_param(bl_slice_t *b, fn_param_t *value);
+bl_result_t bl_greycat_abi__read_function_flags(bl_unused bl_slice_t *b, bl_unused function_flags_t *value);
+bl_result_t bl_greycat_abi__read_functions(bl_slice_t *b, functions_t *value);
+bl_result_t bl_greycat_abi__read_type_attr_flags(bl_unused bl_slice_t *b, bl_unused type_attr_flags_t *value);
+bl_result_t bl_greycat_abi__read_type_attr(bl_slice_t *b, type_attr_t *value);
+bl_result_t bl_greycat_abi__read_type_flags(bl_unused bl_slice_t *b, bl_unused type_flags_t *value);
+bl_result_t bl_greycat_abi__read_type(bl_slice_t *b, type_t *value);
+bl_result_t bl_greycat_abi__read_types(bl_slice_t *b, types_t *value);
+bl_result_t bl_greycat_abi__read_symbol(bl_slice_t *b, symbol_t *value);
+bl_result_t bl_greycat_abi__read_symbols(bl_slice_t *b, symbols_t *value);
+bl_result_t bl_greycat_abi__read_headers(bl_slice_t *b, headers_t *value);
+bl_result_t bl_greycat_abi__read_function(bl_slice_t *b, function_t *value);
+bl_result_t bl_greycat_abi__read_abi(bl_slice_t *b, abi_t *value);
 
 #endif // BINLANG_greycat_abi_H_

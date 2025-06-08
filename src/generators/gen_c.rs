@@ -35,8 +35,9 @@ fn generate_header_file(filename: &str, outdir: &Path, hir: &Hir, sorted: &[&Typ
     writeln!(buf, "#include \"binlang.h\"");
     writeln!(buf);
 
+    let ns = to_c_name(filename, false);
     for ty in sorted {
-        generate_forward_decl(hir, ty, &mut buf);
+        generate_forward_decl(hir, &ns, ty, &mut buf);
     }
 
     writeln!(buf);
@@ -51,6 +52,11 @@ fn generate_header_file(filename: &str, outdir: &Path, hir: &Hir, sorted: &[&Typ
         generate_type(hir, ty, &mut buf);
     }
 
+    for ty in sorted {
+        generate_fn_forward_decl(hir, &ns, ty, &mut buf);
+    }
+
+    writeln!(buf);
     writeln!(buf, "#endif // BINLANG_{filename}_H_");
 
     let inner = buf.into_inner()?;
@@ -75,8 +81,8 @@ fn generate_impl_file(filename: &str, outdir: &Path, hir: &Hir, sorted: &[&Type]
 
 fn generate_impl_type<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
     match ty {
-        Type::Message(ty) => generate_impl_message(hir, ns, ty, out),
-        Type::Bitfield(ty) => generate_impl_bitfield(hir, ns, ty, out),
+        Type::Message(ty) => generate_impl_message(hir, ns, ty, false, out),
+        Type::Bitfield(ty) => generate_impl_bitfield(hir, ns, ty, false, out),
         Type::Native(_ty) => (),
         Type::Array(_ty) => (),
     }
@@ -92,14 +98,25 @@ bl_result_t bl_greycat_abi__headers(bl_slice_t *b, headers_t *value) {
 }
 */
 
-fn generate_impl_message<W: Write>(hir: &Hir, ns: &str, ty: &MessageType, out: &mut W) {
+fn generate_impl_message<W: Write>(
+    hir: &Hir,
+    ns: &str,
+    ty: &MessageType,
+    forward_decl: bool,
+    out: &mut W,
+) {
     let name = hir.symbols.get(ty.name).unwrap();
     let typedef = to_c_name(name, true);
     let fn_name = to_c_name(name, false);
-    writeln!(
+    write!(
         out,
-        "bl_result_t bl_{ns}__read_{fn_name}(bl_slice_t *b, {typedef} *value) {{"
+        "bl_result_t bl_{ns}__read_{fn_name}(bl_slice_t *b, {typedef} *value)"
     );
+    if forward_decl {
+        writeln!(out, ";");
+        return;
+    }
+    writeln!(out, " {{");
     for field in &ty.fields {
         write!(out, "  BL_TRY(bl_");
         let field_ty = hir.types.get(&field.ty).unwrap();
@@ -113,7 +130,11 @@ fn generate_impl_message<W: Write>(hir: &Hir, ns: &str, ty: &MessageType, out: &
             }
             Type::Bitfield(ty) => {
                 // TODO
-                write!(out, "TODO/* bitfield: {} */(b, NULL)", hir.symbols.get(ty.name).unwrap());
+                write!(
+                    out,
+                    "TODO/* bitfield: {} */(b, NULL)",
+                    hir.symbols.get(ty.name).unwrap()
+                );
             }
             Type::Native(ty) => {
                 let f_name = hir.symbols.get(field.name).unwrap();
@@ -134,7 +155,11 @@ fn generate_impl_message<W: Write>(hir: &Hir, ns: &str, ty: &MessageType, out: &
             }
             Type::Array(symbol_id) => {
                 // TODO
-                write!(out, "TODO/* array: {} */(b, NULL)", hir.symbols.get(*symbol_id).unwrap());
+                write!(
+                    out,
+                    "TODO/* array: {} */(b, NULL)",
+                    hir.symbols.get(*symbol_id).unwrap()
+                );
             }
         }
         writeln!(out, ");");
@@ -143,20 +168,31 @@ fn generate_impl_message<W: Write>(hir: &Hir, ns: &str, ty: &MessageType, out: &
     writeln!(out, "}}");
 }
 
-fn generate_impl_bitfield<W: Write>(hir: &Hir, ns: &str, ty: &BitfieldType, out: &mut W) {
+fn generate_impl_bitfield<W: Write>(
+    hir: &Hir,
+    ns: &str,
+    ty: &BitfieldType,
+    forward_decl: bool,
+    out: &mut W,
+) {
     let name = hir.symbols.get(ty.name).unwrap();
     let typedef = to_c_name(name, true);
     let fn_name = to_c_name(name, false);
-    writeln!(
+    write!(
         out,
-        "bl_result_t bl_{ns}__read_{fn_name}(bl_slice_t *b, {typedef} *value) {{"
+        "bl_result_t bl_{ns}__read_{fn_name}(bl_unused bl_slice_t *b, bl_unused {typedef} *value)"
     );
+    if forward_decl {
+        writeln!(out, ";");
+        return;
+    }
+    writeln!(out, " {{");
     // TODO
     writeln!(out, "  return bl_result_err;");
     writeln!(out, "}}");
 }
 
-fn generate_forward_decl<W: Write>(hir: &Hir, ty: &Type, out: &mut W) {
+fn generate_forward_decl<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
     match ty {
         Type::Message(ty) => {
             let struct_name = hir.symbols.get(ty.name).unwrap();
@@ -167,6 +203,18 @@ fn generate_forward_decl<W: Write>(hir: &Hir, ty: &Type, out: &mut W) {
             let struct_name = hir.symbols.get(ty.name).unwrap();
             let typedef = to_c_name(struct_name, true);
             writeln!(out, "typedef int8_t {typedef};");
+        }
+        _ => (),
+    }
+}
+
+fn generate_fn_forward_decl<W: Write>(hir: &Hir, ns: &str, ty: &Type, out: &mut W) {
+    match ty {
+        Type::Message(ty) => {
+            generate_impl_message(hir, ns, ty, true, out);
+        }
+        Type::Bitfield(ty) => {
+            generate_impl_bitfield(hir, ns, ty, true, out);
         }
         _ => (),
     }

@@ -6,7 +6,7 @@ bl_result_t bl_greycat_abi__read_fn_param(bl_slice_t *b, fn_param_t *value) {
   BL_TRY(bl_slice__read_vu32(b, &value->name));
   return bl_result_ok;
 }
-bl_result_t bl_greycat_abi__read_function_flags(bl_slice_t *b, function_flags_t *value) {
+bl_result_t bl_greycat_abi__read_function_flags(bl_unused bl_slice_t *b, bl_unused function_flags_t *value) {
   return bl_result_err;
 }
 bl_result_t bl_greycat_abi__read_functions(bl_slice_t *b, functions_t *value) {
@@ -15,7 +15,7 @@ bl_result_t bl_greycat_abi__read_functions(bl_slice_t *b, functions_t *value) {
   BL_TRY(bl_TODO/* array: Function */(b, NULL));
   return bl_result_ok;
 }
-bl_result_t bl_greycat_abi__read_type_attr_flags(bl_slice_t *b, type_attr_flags_t *value) {
+bl_result_t bl_greycat_abi__read_type_attr_flags(bl_unused bl_slice_t *b, bl_unused type_attr_flags_t *value) {
   return bl_result_err;
 }
 bl_result_t bl_greycat_abi__read_type_attr(bl_slice_t *b, type_attr_t *value) {
@@ -29,7 +29,7 @@ bl_result_t bl_greycat_abi__read_type_attr(bl_slice_t *b, type_attr_t *value) {
   BL_TRY(bl_TODO/* bitfield: TypeAttrFlags */(b, NULL));
   return bl_result_ok;
 }
-bl_result_t bl_greycat_abi__read_type_flags(bl_slice_t *b, type_flags_t *value) {
+bl_result_t bl_greycat_abi__read_type_flags(bl_unused bl_slice_t *b, bl_unused type_flags_t *value) {
   return bl_result_err;
 }
 bl_result_t bl_greycat_abi__read_type(bl_slice_t *b, type_t *value) {
