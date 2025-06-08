@@ -13,3 +13,5 @@ target_link_libraries(main PRIVATE binlang)
 target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR}/../libs/c)
 
 target_compile_options(main PRIVATE -Wall -Wextra -Werror)
+# Whether or not to generate read/write functions and types for floats (requires float.h)
+target_compile_options(main PRIVATE -DFLOAT)

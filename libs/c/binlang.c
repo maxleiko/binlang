@@ -203,7 +203,7 @@ bl_result_t bl_slice__read_vi64(bl_slice_t *b, int64_t *value) {
   return bl_result_eof;
 }
 
-bl_result_t bl_slice__read_exact(bl_slice_t *b, uint8_t* buf, uint64_t len) {
+bl_result_t bl_slice__read_exact(bl_slice_t *b, uint8_t *buf, uint64_t len) {
   if (b->len < len) {
     return bl_result_eof;
   }
@@ -211,3 +211,43 @@ bl_result_t bl_slice__read_exact(bl_slice_t *b, uint8_t* buf, uint64_t len) {
   bl_slice__advance(b, len);
   return bl_result_ok;
 }
+
+#ifdef FLOAT
+bl_result_t bl_slice__read_f32(bl_slice_t *b, f32_t *value) {
+  if (b->len < 8) {
+    return bl_result_eof;
+  }
+  uint8_t *data = b->data;
+
+  f32_t tmp = 0;
+  tmp |= (f32_t)data[0] << 0;
+  tmp |= (f32_t)data[1] << 8;
+  tmp |= (f32_t)data[2] << 16;
+  tmp |= (f32_t)data[3] << 24;
+
+  *value = tmp;
+  bl_slice__advance(b, 4);
+  return bl_result_ok;
+}
+
+bl_result_t bl_slice__read_f64(bl_slice_t *b, f64_t *value) {
+  if (b->len < 8) {
+    return bl_result_eof;
+  }
+  uint8_t *data = b->data;
+
+  f64_t tmp = 0;
+  tmp |= (f64_t)data[0] << 0;
+  tmp |= (f64_t)data[1] << 8;
+  tmp |= (f64_t)data[2] << 16;
+  tmp |= (f64_t)data[3] << 24;
+  tmp |= (f64_t)data[4] << 32;
+  tmp |= (f64_t)data[5] << 40;
+  tmp |= (f64_t)data[6] << 48;
+  tmp |= (f64_t)data[7] << 56;
+
+  *value = tmp;
+  bl_slice__advance(b, 8);
+  return bl_result_ok;
+}
+#endif
