@@ -5,6 +5,16 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug generate",
+      "cargo": {
+        "args": ["run"]
+      },
+      "args": ["examples/greycat_abi.bl", "-o", "examples/src"]
+    },
+
+    {
       "name": "Debug example",
       "type": "cppdbg",
       "request": "launch",

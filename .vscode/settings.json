@@ -1,3 +1,15 @@
 {
-  "cmake.sourceDirectory": "${workspaceFolder}/examples"
+  "cmake.sourceDirectory": "${workspaceFolder}/examples",
+  "files.associations": {
+    "*.css": "css",
+    "*.geojson": "json",
+    "*.YAML-tmLanguage": "yaml-tmlanguage",
+    "*.jsonl": "ndjson",
+    "*.njson": "ndjson",
+    "*.env": "dotenv",
+    "rush.json": "jsonc",
+    "*.svg": "html",
+    "**/i3/config": "i3",
+    "binlang.h": "c"
+  }
 }

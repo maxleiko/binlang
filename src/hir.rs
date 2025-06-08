@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::*,
@@ -8,7 +8,6 @@ use crate::{
 pub struct Hir {
     pub root: SymbolId,
     pub symbols: Symbols,
-    // natives: NativeTypeSymbols,
     pub types: HashMap<SymbolId, Type>,
 }
 
@@ -57,18 +56,52 @@ impl Hir {
         // we now have all types defined, let's dive in the fields
         for def in &file.defs {
             if let TopLevel::Message(msg) = def {
+                let mut associated_fields = HashMap::new();
+                for field in &msg.fields {
+                    if let TypeExpr::ArrayWithField(ident, associated_name) = &field.ty {
+                        let associated_field = msg
+                            .fields
+                            .iter()
+                            .find(|f| &f.name == associated_name)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "referenced field '{associated_name}' in array {} is unknown",
+                                    field.name
+                                )
+                            });
+                        let associated_field_type = type_expr_to_type_id(
+                            &associated_field.ty,
+                            &mut symbols,
+                            &natives,
+                            &mut types,
+                            &associated_fields,
+                        );
+                        associated_fields.insert(associated_name.as_str(), associated_field_type);
+                    }
+                }
+
                 let mut fields = Vec::with_capacity(msg.fields.len());
                 for field in &msg.fields {
                     let field_name = symbols.insert(&field.name);
-                    let field_type =
-                        type_expr_to_type_id(&field.ty, &mut symbols, &natives, &mut types);
-                    fields.push((field_name, field_type));
+                    if associated_fields.contains_key(&*field.name) {
+                        // this field is referenced in an array, the array will deal with it
+                    } else {
+                        let field_type = type_expr_to_type_id(
+                            &field.ty,
+                            &mut symbols,
+                            &natives,
+                            &mut types,
+                            &associated_fields,
+                        );
+                        fields.push(Field {
+                            name: field_name,
+                            ty: field_type,
+                        });
+                    }
                 }
                 let msg_name_id = symbols.find(&msg.name).unwrap();
                 if let Type::Message(ty) = types.get_mut(&msg_name_id).unwrap() {
-                    for (field_name, field_type) in fields {
-                        ty.add_field(field_name, field_type);
-                    }
+                    ty.fields = fields;
                 }
             }
         }
@@ -76,7 +109,6 @@ impl Hir {
         Self {
             root,
             symbols,
-            // natives,
             types,
         }
     }
@@ -117,7 +149,7 @@ impl std::fmt::Debug for HirDebugTypes<'_> {
     }
 }
 
-struct HirDebugType<'a> {
+pub(crate) struct HirDebugType<'a> {
     symbols: &'a Symbols,
     ty: &'a Type,
 }
@@ -136,7 +168,19 @@ impl std::fmt::Debug for HirDebugType<'_> {
             }
             .fmt(f),
             Type::Native(ty) => ty.fmt(f),
-            Type::Array(id) => write!(f, "{}[]", self.symbols.get(*id).unwrap()),
+            Type::Array(ArrayType::Default(id)) => {
+                write!(f, "{}[]", self.symbols.get(*id).unwrap())
+            }
+            Type::Array(ArrayType::Field {
+                elem_type,
+                field_name,
+                field_type,
+            }) => {
+                let elem_type = self.symbols.get(*elem_type).unwrap();
+                let field_name = self.symbols.get(*field_name).unwrap();
+                let field_type = self.symbols.get(*field_type).unwrap();
+                write!(f, "{elem_type}[{field_name}: {field_type}]")
+            }
         }
     }
 }
@@ -148,18 +192,14 @@ struct HirDebugMessageType<'a> {
 
 impl std::fmt::Debug for HirDebugMessageType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.msg
-            .fields
-            .iter()
-            .map(|f| {
-                format!(
-                    "{}: {}",
+        f.debug_map()
+            .entries(self.msg.fields.iter().map(|f| {
+                (
                     self.symbols.get(f.name).unwrap(),
-                    self.symbols.get(f.ty).unwrap()
+                    self.symbols.get(f.ty).unwrap(),
                 )
-            })
-            .collect::<Vec<_>>()
-            .fmt(f)
+            }))
+            .finish()
     }
 }
 
@@ -170,16 +210,12 @@ struct HirDebugBitfieldType<'a> {
 
 impl std::fmt::Debug for HirDebugBitfieldType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BitfieldType")
-            .field("name", &self.symbols.get(self.bf.name).unwrap())
-            .field(
-                "flags",
-                &self
-                    .bf
+        f.debug_map()
+            .entries(
+                self.bf
                     .flags
                     .iter()
-                    .map(|f| self.symbols.get(f.name).unwrap())
-                    .collect::<Vec<_>>(),
+                    .map(|f| (self.symbols.get(f.name).unwrap(), f.offset)),
             )
             .finish()
     }
@@ -240,7 +276,16 @@ pub enum Type {
     Message(MessageType),
     Bitfield(BitfieldType),
     Native(NativeType),
-    Array(SymbolId),
+    Array(ArrayType),
+}
+
+pub enum ArrayType {
+    Default(SymbolId),
+    Field {
+        elem_type: SymbolId,
+        field_name: SymbolId,
+        field_type: SymbolId,
+    },
 }
 
 #[allow(unused)]
@@ -260,6 +305,10 @@ impl Type {
     pub fn is_native(&self) -> bool {
         matches!(self, Self::Native(_))
     }
+
+    pub fn to_debug<'a>(&'a self, symbols: &'a Symbols) -> HirDebugType<'a> {
+        HirDebugType { symbols, ty: self }
+    }
 }
 
 pub struct MessageType {
@@ -278,11 +327,6 @@ impl MessageType {
             name,
             fields: Default::default(),
         }
-    }
-
-    fn add_field(&mut self, name: SymbolId, ty: SymbolId) -> &mut Self {
-        self.fields.push(Field { name, ty });
-        self
     }
 }
 
@@ -310,6 +354,7 @@ fn type_expr_to_type_id(
     symbols: &mut Symbols,
     natives: &NativeTypeSymbols,
     types: &mut HashMap<SymbolId, Type>,
+    associated_fields: &HashMap<&str, SymbolId>,
 ) -> SymbolId {
     match ty {
         TypeExpr::Ident(ty) => match ty {
@@ -318,12 +363,12 @@ fn type_expr_to_type_id(
                 .find(name)
                 .unwrap_or_else(|| panic!("use of undefined type '{name}'")),
         },
-        TypeExpr::ArrayNoField(ty) | TypeExpr::ArrayWithField(ty, _) => match ty {
+        TypeExpr::ArrayNoField(ty) => match ty {
             TypeIdent::Native(native_type) => {
                 let generic_id = natives.type_id(*native_type);
                 let name = symbols.get(generic_id).unwrap();
                 let array_id = symbols.insert(format!("{name}[]"));
-                types.insert(array_id, Type::Array(generic_id));
+                types.insert(array_id, Type::Array(ArrayType::Default(generic_id)));
                 array_id
             }
             TypeIdent::Custom(name) => {
@@ -331,9 +376,43 @@ fn type_expr_to_type_id(
                     .find(name)
                     .unwrap_or_else(|| panic!("use of undefined type '{name}'"));
                 let array_id = symbols.insert(format!("{name}[]"));
-                types.insert(array_id, Type::Array(generic_id));
+                types.insert(array_id, Type::Array(ArrayType::Default(generic_id)));
                 array_id
             }
         },
+        TypeExpr::ArrayWithField(ty, field) => {
+            let associated_type = associated_fields.get(field.as_str()).unwrap();
+            match ty {
+                TypeIdent::Native(native_type) => {
+                    let elem_type = natives.type_id(*native_type);
+                    let name = symbols.get(elem_type).unwrap();
+                    let array_id = symbols.insert(format!("{name}[{field}]"));
+                    types.insert(
+                        array_id,
+                        Type::Array(ArrayType::Field {
+                            elem_type,
+                            field_name: symbols.insert(field),
+                            field_type: *associated_type,
+                        }),
+                    );
+                    array_id
+                }
+                TypeIdent::Custom(name) => {
+                    let elem_type = symbols
+                        .find(name)
+                        .unwrap_or_else(|| panic!("use of undefined type '{name}'"));
+                    let array_id = symbols.insert(format!("{name}[{field}]"));
+                    types.insert(
+                        array_id,
+                        Type::Array(ArrayType::Field {
+                            elem_type,
+                            field_name: symbols.insert(field),
+                            field_type: *associated_type,
+                        }),
+                    );
+                    array_id
+                }
+            }
+        }
     }
 }

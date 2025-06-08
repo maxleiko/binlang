@@ -8,13 +8,12 @@ message Abi {
 message Headers {
   major: u16,
   magic: u16,
-  version: u16,
+  version: u32,
   crc: u64,
 }
 
 message Symbols {
   byte_size: u64,
-  // omitting array length means we first read a u32 that will be the length
   symbols: Symbol[],
 }
 

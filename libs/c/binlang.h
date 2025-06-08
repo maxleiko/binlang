@@ -1,17 +1,11 @@
 #ifndef binlang_h
 #define binlang_h
 
-#ifdef NDEBUG
-#define bl_assert(e) ((void)(e))
-#else
-#include <assert.h>
-#define bl_assert(e) assert(e)
-#endif
-
 #define bl_unused __attribute__((unused))
 
 #include "alloc.h"
 #include "array.h"
+#include "vec.h"
 
 typedef struct {
   uint8_t *data;
@@ -55,6 +49,8 @@ bl_result_t bl_slice__read_vu64(bl_slice_t *b, uint64_t *value);
 bl_result_t bl_slice__read_vi32(bl_slice_t *b, int32_t *value);
 /// Read LEB128-encoded signed 64-bit
 bl_result_t bl_slice__read_vi64(bl_slice_t *b, int64_t *value);
+
+bl_result_t bl_slice__read_exact(bl_slice_t *b, uint8_t* buf, uint64_t len);
 
 bl_result_t bl_TODO(bl_slice_t *b, void *value);
 

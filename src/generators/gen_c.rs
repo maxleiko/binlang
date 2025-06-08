@@ -117,56 +117,104 @@ fn generate_impl_message<W: Write>(
         return;
     }
     writeln!(out, " {{");
+    let indent = "  ";
     for field in &ty.fields {
-        write!(out, "  BL_TRY(bl_");
-        let field_ty = hir.types.get(&field.ty).unwrap();
-        match field_ty {
+        write!(out, "{indent}"); // indent
+        let f_name = hir.symbols.get(field.name).unwrap();
+        match hir.types.get(&field.ty).unwrap() {
             Type::Message(ty) => {
-                let f_name = hir.symbols.get(field.name).unwrap();
                 let f_ty_name = hir.symbols.get(ty.name).unwrap();
                 let f_typedef = to_c_name(f_ty_name, true);
                 let f_ty_fn_name = to_c_name(f_ty_name, false);
-                write!(out, "{ns}__read_{f_ty_fn_name}(b, &value->{f_name})");
+                writeln!(
+                    out,
+                    "BL_TRY(bl_{ns}__read_{f_ty_fn_name}(b, &value->{f_name}));"
+                );
             }
             Type::Bitfield(ty) => {
                 // TODO
-                write!(
+                writeln!(
                     out,
-                    "TODO/* bitfield: {} */(b, NULL)",
+                    "BL_TRY(bl_TODO/* bitfield: {} */(b, NULL));",
                     hir.symbols.get(ty.name).unwrap()
                 );
             }
             Type::Native(ty) => {
-                let f_name = hir.symbols.get(field.name).unwrap();
                 match ty {
-                    NativeType::U8 => write!(out, "slice__read_u8(b, &value->{f_name})"),
-                    NativeType::U16 => write!(out, "slice__read_u16(b, &value->{f_name})"),
-                    NativeType::U32 => write!(out, "slice__read_u32(b, &value->{f_name})"),
-                    NativeType::U64 => write!(out, "slice__read_u64(b, &value->{f_name})"),
-                    NativeType::I8 => write!(out, "slice__read_i8(b, &value->{f_name})"),
-                    NativeType::I16 => write!(out, "slice__read_i16(b, &value->{f_name})"),
-                    NativeType::I32 => write!(out, "slice__read_i32(b, &value->{f_name})"),
-                    NativeType::I64 => write!(out, "slice__read_i64(b, &value->{f_name})"),
-                    NativeType::VU32 => write!(out, "slice__read_vu32(b, &value->{f_name})"),
-                    NativeType::VU64 => write!(out, "slice__read_vu64(b, &value->{f_name})"),
-                    NativeType::VI32 => write!(out, "slice__read_vi32(b, &value->{f_name})"),
-                    NativeType::VI64 => write!(out, "slice__read_vi64(b, &value->{f_name})"),
+                    NativeType::U8 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_u8(b, &value->{f_name}));")
+                    }
+                    NativeType::U16 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_u16(b, &value->{f_name}));")
+                    }
+                    NativeType::U32 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_u32(b, &value->{f_name}));")
+                    }
+                    NativeType::U64 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_u64(b, &value->{f_name}));")
+                    }
+                    NativeType::I8 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_i8(b, &value->{f_name}));")
+                    }
+                    NativeType::I16 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_i16(b, &value->{f_name}));")
+                    }
+                    NativeType::I32 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_i32(b, &value->{f_name}));")
+                    }
+                    NativeType::I64 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_i64(b, &value->{f_name}));")
+                    }
+                    NativeType::VU32 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_vu32(b, &value->{f_name}));")
+                    }
+                    NativeType::VU64 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_vu64(b, &value->{f_name}));")
+                    }
+                    NativeType::VI32 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_vi32(b, &value->{f_name}));")
+                    }
+                    NativeType::VI64 => {
+                        writeln!(out, "BL_TRY(bl_slice__read_vi64(b, &value->{f_name}));")
+                    }
                 };
             }
-            Type::Array(symbol_id) => {
-                // TODO
-                write!(
+            Type::Array(ArrayType::Default(type_id)) => {
+                let elem_ty = hir.symbols.get(*type_id).unwrap();
+                let elem_ty_typedef = to_c_name(elem_ty, true);
+                writeln!(out, "BL_TRY(bl_slice__read_u32(b, &value->{f_name}.size);");
+                writeln!(out, "{indent}for (uint32_t i = 0; i < &value->{f_name}.size; i++) {{");
+                writeln!(out, "{indent}  // TODO read: {elem_ty_typedef}");
+                writeln!(out, "{indent}}}");
+            }
+            Type::Array(ArrayType::Field {
+                elem_type,
+                field_name,
+                field_type,
+            }) => {
+                let elem_ty = hir.symbols.get(*elem_type).unwrap();
+                let elem_ty_typedef = to_c_name(elem_ty, true);
+                let field_name = hir.symbols.get(*field_name).unwrap();
+                writeln!(out, "// then read {field_name}*{elem_ty_typedef}");
+                writeln!(
                     out,
-                    "TODO/* array: {} */(b, NULL)",
-                    hir.symbols.get(*symbol_id).unwrap()
+                    "  BL_TRY(bl_TODO/* array: {} */(b, NULL));",
+                    hir.symbols.get(*elem_type).unwrap()
                 );
             }
         }
-        writeln!(out, ");");
     }
     writeln!(out, "  return bl_result_ok;");
     writeln!(out, "}}");
 }
+
+// fn generate_impl_message_type_read<W: Write>(hir: &Hir, ns: &str, ty: &MessageType, out: &mut W) {
+//     let f_name = hir.symbols.get(field.name).unwrap();
+//     let f_ty_name = hir.symbols.get(ty.name).unwrap();
+//     let f_typedef = to_c_name(f_ty_name, true);
+//     let f_ty_fn_name = to_c_name(f_ty_name, false);
+//     write!(out, "{ns}__read_{f_ty_fn_name}(b, &value->{f_name})");
+// }
 
 fn generate_impl_bitfield<W: Write>(
     hir: &Hir,
@@ -225,7 +273,7 @@ fn generate_type<W: Write>(hir: &Hir, ty: &Type, out: &mut W) {
         Type::Message(ty) => generate_message(hir, ty, out),
         Type::Bitfield(ty) => {}
         Type::Native(ty) => {}
-        Type::Array(type_id) => {}
+        Type::Array(ty) => {}
     }
 }
 
@@ -236,11 +284,12 @@ fn generate_message<W: Write>(hir: &Hir, msg: &MessageType, out: &mut W) {
         let field_ty = hir.types.get(&field.ty).unwrap();
         write!(out, "  ");
         match field_ty {
-            Type::Array(generic_type) => {
+            Type::Array(ArrayType::Default(elem_type))
+            | Type::Array(ArrayType::Field { elem_type, .. }) => {
                 write!(
                     out,
                     "BlArray({})",
-                    to_c_name(hir.symbols.get(*generic_type).unwrap(), true)
+                    to_c_name(hir.symbols.get(*elem_type).unwrap(), true)
                 );
             }
             _ => {
@@ -274,6 +323,7 @@ fn generate_bitfield<W: Write>(hir: &Hir, bitfield: &BitfieldType, out: &mut W) 
     writeln!(out);
 }
 
+/// TODO cache all those strings rather than always re-creating them on the spot
 fn to_c_name(input: &str, as_type: bool) -> Cow<'_, str> {
     match input {
         "u8" => return Cow::Borrowed("uint8_t"),

@@ -7,6 +7,11 @@ extern "C" {
 
 #include "alloc.h"
 
+#ifdef NDEBUG
+#define assert(e) ((void)(e))
+#else
+#include <assert.h>
+#endif
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -24,20 +29,18 @@ extern "C" {
   struct {                                                                     \
     T *elems;                                                                  \
     uint32_t size;                                                             \
-    uint32_t capacity;                                                         \
   }
 
 /// Initialize an array.
-#define array_init(self)                                                       \
-  ((self)->size = 0, (self)->capacity = 0, (self)->elems = NULL)
+#define array_init(self) ((self)->size = 0, (self)->elems = NULL)
 
 /// Create an empty array.
 #define array_new()                                                            \
-  { NULL, 0, 0 }
+  { NULL, 0 }
 
 /// Get a pointer to the element at a given `index` in the array.
 #define array_get(self, _index)                                                \
-  (bl_assert((uint32_t)(_index) < (self)->size), &(self)->elems[_index])
+  (assert((uint32_t)(_index) < (self)->size), &(self)->elems[_index])
 
 /// Get a pointer to the first element in the array.
 #define array_front(self) array_get(self, 0)
@@ -49,10 +52,10 @@ extern "C" {
 /// memory allocated for the array's elems.
 #define array_clear(self) ((self)->size = 0)
 
-/// Reserve `new_capacity` elements of space in the array. If `new_capacity` is
-/// less than the array's current capacity, this function has no effect.
-#define array_reserve(self, new_capacity)                                      \
-  _array__reserve((BlArray *)(self), array_elem_size(self), new_capacity)
+/// Reserve `size` elements of space in the array. If the array is already
+/// initialized, it does nothing.
+#define array_reserve(self, size)                                              \
+  _array__reserve((BlArray *)(self), array_elem_size(self), size)
 
 /// Free any memory allocated for this array. Note that this does not free any
 /// memory allocated for the array's elems.
@@ -166,14 +169,13 @@ static inline void _array__delete(BlArray *self) {
     bl_free(self->elems);
     self->elems = NULL;
     self->size = 0;
-    self->capacity = 0;
   }
 }
 
 /// This is not what you're looking for, see `array_erase`.
 static inline void _array__erase(BlArray *self, size_t element_size,
                                  uint32_t index) {
-  bl_assert(index < self->size);
+  assert(index < self->size);
   char *elems = (char *)self->elems;
   memmove(elems + index * element_size, elems + (index + 1) * element_size,
           (self->size - index - 1) * element_size);
@@ -182,14 +184,10 @@ static inline void _array__erase(BlArray *self, size_t element_size,
 
 /// This is not what you're looking for, see `array_reserve`.
 static inline void _array__reserve(BlArray *self, size_t element_size,
-                                   uint32_t new_capacity) {
-  if (new_capacity > self->capacity) {
-    if (self->elems) {
-      self->elems = bl_realloc(self->elems, new_capacity * element_size);
-    } else {
-      self->elems = bl_malloc(new_capacity * element_size);
-    }
-    self->capacity = new_capacity;
+                                   uint32_t size) {
+  if (self->elems == NULL) {
+    self->elems = bl_malloc(size * element_size);
+    self->size = size;
   }
 }
 
@@ -208,20 +206,6 @@ static inline void _array__swap(BlArray *self, BlArray *other) {
   *self = swap;
 }
 
-/// This is not what you're looking for, see `array_push` or `array_grow_by`.
-static inline void _array__grow(BlArray *self, uint32_t count,
-                                size_t element_size) {
-  uint32_t new_size = self->size + count;
-  if (new_size > self->capacity) {
-    uint32_t new_capacity = self->capacity * 2;
-    if (new_capacity < 8)
-      new_capacity = 8;
-    if (new_capacity < new_size)
-      new_capacity = new_size;
-    _array__reserve(self, element_size, new_capacity);
-  }
-}
-
 /// This is not what you're looking for, see `array_splice`.
 static inline void _array__splice(BlArray *self, size_t element_size,
                                   uint32_t index, uint32_t old_count,
@@ -229,7 +213,7 @@ static inline void _array__splice(BlArray *self, size_t element_size,
   uint32_t new_size = self->size + new_count - old_count;
   uint32_t old_end = index + old_count;
   uint32_t new_end = index + new_count;
-  bl_assert(old_end <= self->size);
+  assert(old_end <= self->size);
 
   _array__reserve(self, element_size, new_size);
 

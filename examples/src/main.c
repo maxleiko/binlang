@@ -5,9 +5,9 @@
 #include "binlang.h"
 #include "greycat_abi.h"
 
-typedef BlArray(uint8_t) byte_array_t;
+typedef BlVec(uint8_t) byte_vec_t;
 
-int read_file(const char *filepath, byte_array_t *buf) {
+int read_file(const char *filepath, byte_vec_t *buf) {
   /* open the file read-only */
   int fd = open(filepath, O_RDONLY);
   if (fd < 0) {
@@ -16,7 +16,7 @@ int read_file(const char *filepath, byte_array_t *buf) {
   }
 
   while (true) {
-    array_reserve(buf, buf->capacity + 8192);
+    vec_reserve(buf, buf->capacity + 8192);
     ssize_t n = read(fd, buf->elems + buf->size, buf->capacity - buf->size);
     if (n < 0) {
       perror("read");
@@ -38,7 +38,7 @@ int32_t main(int32_t argc, char *argv[]) {
     return 1;
   }
 
-  byte_array_t buf = array_new();
+  byte_vec_t buf = vec_new();
   if (read_file(argv[1], &buf) > 0) {
     return 1;
   }
@@ -47,7 +47,7 @@ int32_t main(int32_t argc, char *argv[]) {
   abi_t abi = {0};
   bl_greycat_abi__read_abi(&b, &abi);
 
-  array_delete(&buf);
+  vec_delete(&buf);
 
   return 0;
 }

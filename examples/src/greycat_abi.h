@@ -1,7 +1,7 @@
 #ifndef BINLANG_greycat_abi_H_
 #define BINLANG_greycat_abi_H_
 
-#include <binlang.h>
+#include "binlang.h"
 
 typedef struct FnParam fn_param_t;
 typedef int8_t function_flags_t;
@@ -39,7 +39,6 @@ struct FnParam {
 
 struct Functions {
   uint64_t byte_size;
-  uint32_t nb_functions;
   BlArray(function_t) functions;
 };
 
@@ -62,7 +61,6 @@ struct Type {
   uint32_t g1;
   uint32_t g2;
   uint32_t super_type;
-  uint32_t nb_attrs;
   uint32_t attrs_off;
   uint32_t mapped_prog_type_off;
   uint32_t masked_abi_type_off;
@@ -73,13 +71,11 @@ struct Type {
 
 struct Types {
   uint64_t byte_size;
-  uint32_t nb_types;
   uint32_t nb_attrs;
   BlArray(type_t) types;
 };
 
 struct Symbol {
-  uint32_t size;
   BlArray(uint8_t) text;
 };
 
@@ -91,7 +87,7 @@ struct Symbols {
 struct Headers {
   uint16_t major;
   uint16_t magic;
-  uint16_t version;
+  uint32_t version;
   uint64_t crc;
 };
 
@@ -100,7 +96,6 @@ struct Function {
   uint32_t type;
   uint32_t name;
   uint32_t lib;
-  uint32_t arity;
   BlArray(fn_param_t) params;
   uint32_t return_type;
   fn_param_t flags;

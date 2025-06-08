@@ -204,3 +204,12 @@ bl_result_t bl_slice__read_vi64(bl_slice_t *b, int64_t *value) {
 
   return bl_result_eof;
 }
+
+bl_result_t bl_slice__read_exact(bl_slice_t *b, uint8_t* buf, uint64_t len) {
+  if (b->len < len) {
+    return bl_result_eof;
+  }
+  memcpy(buf, b->data, len);
+  bl_slice__advance(b, len);
+  return bl_result_ok;
+}

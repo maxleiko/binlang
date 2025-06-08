@@ -11,7 +11,7 @@ bl_result_t bl_greycat_abi__read_function_flags(bl_unused bl_slice_t *b, bl_unus
 }
 bl_result_t bl_greycat_abi__read_functions(bl_slice_t *b, functions_t *value) {
   BL_TRY(bl_slice__read_u64(b, &value->byte_size));
-  BL_TRY(bl_slice__read_u32(b, &value->nb_functions));
+  // then read nb_functions*function_t
   BL_TRY(bl_TODO/* array: Function */(b, NULL));
   return bl_result_ok;
 }
@@ -40,36 +40,38 @@ bl_result_t bl_greycat_abi__read_type(bl_slice_t *b, type_t *value) {
   BL_TRY(bl_slice__read_vu32(b, &value->g1));
   BL_TRY(bl_slice__read_vu32(b, &value->g2));
   BL_TRY(bl_slice__read_vu32(b, &value->super_type));
-  BL_TRY(bl_slice__read_vu32(b, &value->nb_attrs));
   BL_TRY(bl_slice__read_vu32(b, &value->attrs_off));
   BL_TRY(bl_slice__read_vu32(b, &value->mapped_prog_type_off));
   BL_TRY(bl_slice__read_vu32(b, &value->masked_abi_type_off));
   BL_TRY(bl_slice__read_vu32(b, &value->nullable_nb_bytes));
   BL_TRY(bl_TODO/* bitfield: TypeFlags */(b, NULL));
+  // then read nb_attrs*type_attr_t
   BL_TRY(bl_TODO/* array: TypeAttr */(b, NULL));
   return bl_result_ok;
 }
 bl_result_t bl_greycat_abi__read_types(bl_slice_t *b, types_t *value) {
   BL_TRY(bl_slice__read_u64(b, &value->byte_size));
-  BL_TRY(bl_slice__read_u32(b, &value->nb_types));
   BL_TRY(bl_slice__read_u32(b, &value->nb_attrs));
+  // then read nb_types*type_t
   BL_TRY(bl_TODO/* array: Type */(b, NULL));
   return bl_result_ok;
 }
 bl_result_t bl_greycat_abi__read_symbol(bl_slice_t *b, symbol_t *value) {
-  BL_TRY(bl_slice__read_vu32(b, &value->size));
+  // then read size*uint8_t
   BL_TRY(bl_TODO/* array: u8 */(b, NULL));
   return bl_result_ok;
 }
 bl_result_t bl_greycat_abi__read_symbols(bl_slice_t *b, symbols_t *value) {
   BL_TRY(bl_slice__read_u64(b, &value->byte_size));
+  // read u32=n for array length
+  // then read n*symbol_t
   BL_TRY(bl_TODO/* array: Symbol */(b, NULL));
   return bl_result_ok;
 }
 bl_result_t bl_greycat_abi__read_headers(bl_slice_t *b, headers_t *value) {
   BL_TRY(bl_slice__read_u16(b, &value->major));
   BL_TRY(bl_slice__read_u16(b, &value->magic));
-  BL_TRY(bl_slice__read_u16(b, &value->version));
+  BL_TRY(bl_slice__read_u32(b, &value->version));
   BL_TRY(bl_slice__read_u64(b, &value->crc));
   return bl_result_ok;
 }
@@ -78,7 +80,7 @@ bl_result_t bl_greycat_abi__read_function(bl_slice_t *b, function_t *value) {
   BL_TRY(bl_slice__read_vu32(b, &value->type));
   BL_TRY(bl_slice__read_vu32(b, &value->name));
   BL_TRY(bl_slice__read_vu32(b, &value->lib));
-  BL_TRY(bl_slice__read_vu32(b, &value->arity));
+  // then read arity*fn_param_t
   BL_TRY(bl_TODO/* array: FnParam */(b, NULL));
   BL_TRY(bl_slice__read_vu32(b, &value->return_type));
   BL_TRY(bl_greycat_abi__read_fn_param(b, &value->flags));
