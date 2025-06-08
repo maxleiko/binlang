@@ -1,0 +1,54 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Binlang",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#identifiers"
+    },
+    {
+      "include": "#numbers"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.bl",
+          "match": "\\b(message|bitfield)\\b"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "meta.array.type.bl",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\[\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\]",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.bl"
+            },
+            "2": {
+              "name": "variable.other.readwrite.bl"
+            }
+          }
+        },
+        {
+          "name": "variable.other.member.bl",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?=\\s*:)"
+        },
+        {
+          "name": "entity.name.type.bl",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?!\\s*:)"
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.bl",
+      "match": "\\b\\d+\\b"
+    }
+  },
+  "scopeName": "source.bl"
+}

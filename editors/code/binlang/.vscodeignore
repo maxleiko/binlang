@@ -1,0 +1,7 @@
+.vscode/**
+.vscode-test/**
+.gitignore
+pnpm-lock.yaml
+node_modules
+.gitignore
+binlang.vsix

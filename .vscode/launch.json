@@ -21,6 +21,12 @@
       "program": "${workspaceFolder}/build/main",
       "args": ["gcdata/abi"],
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Binlang extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/editors/code"]
     }
   ]
 }
